@@ -1,0 +1,113 @@
+---
+
+- hosts: all
+  gather_facts: false
+  tasks:
+
+   - name: Check repo directory
+     stat:
+       path: '{{git.pull_dest }}'
+     register: check_repo
+
+   - name: Tasks if project exists
+     block:
+
+      - name: Check config files of project before git pull
+        find:
+          paths: '{{ git.config_files_dir }}'
+#          excludes: ''
+          get_checksum: true
+        register: check_config_files
+
+      - name: Saved check result as array
+        set_fact:
+          array1: "{{ array1 + [ { 'file': item.path, 'sha1sum': item.checksum } ] }}"
+        with_items:
+          - '{{ check_config_files.files }}'
+
+      - name: Create json file
+        file:
+          path: files_list.json
+          state: touch
+        delegate_to: localhost
+
+      - name: Change array variable into json
+        copy:
+          content: '{{ array1 | to_nice_json }}'
+          dest: files_list.json
+        delegate_to: localhost
+
+      - name: Get variable from json file
+        set_fact:
+          get_json1: "{{ lookup ('file', 'files_list.json') | from_json  }}"
+
+      - name: Git pull project repo
+        git:
+          repo: '{{ git.repo }}'
+          dest: '{{ git.pull_dest }}'
+          version: '{{ git.version }}'
+          key_file: '{{ ssh_key_file }}'
+          accept_hostkey: yes
+
+      - name: Check config files of project after git pull
+        find:
+          paths: '{{ git.config_files_dir }}'
+#          excludes: ''
+          get_checksum: true
+        register: check_config_files2
+
+      - name: Saved check result as array
+        set_fact:
+          array2: "{{ array2 + [ { 'file': item.path, 'sha1sum': item.checksum } ] }}"
+        with_items:
+          - '{{ check_config_files2.files }}'      
+
+      - name: Create json file
+        file:
+          path: files_list2.json
+          state: touch
+        delegate_to: localhost
+
+      - name: Change array variable into json
+        copy:
+          content: '{{ array2 | to_nice_json }}'
+          dest: files_list2.json
+        delegate_to: localhost
+
+      - name: Get variable from json file
+        set_fact:
+          get_json2: "{{ lookup ('file', 'files_list2.json') | from_json }}"
+
+      - name: Copy changed config files into defined config path
+        copy:
+          src: '{{ item[2] }}'
+          dest: '{{ config_files_dir }}'
+          remote_src: yes
+        with_together:
+          - '{{ get_json1 }}'
+          - '{{ get_json2 }}'
+          - '{{ check_config_files2 | map(attribute="path") | list }}'
+        when: "'{{ item[0].sha1sum }}' != '{{ item[1].sha1sum }}'"
+
+     when: check_repo.stat.isdir is defined
+
+
+   - name: Tasks if project does not exist
+     block:
+
+      - name: Git Clone Repo
+        git:
+          repo: '{{ git.repo }}'
+          dest: '{{ git.pull_dest }}'
+          version: '{{ git.version }}'
+          key_file: '{{ ssh_key_file }}'
+          accept_hostkey: yes
+
+      - name: Copy config directory into defined config path
+        synchronize:
+          src: '{{ git.config_files_dir }}'
+          dest: '{{ config_files_dir }}'
+        delegate_to: '{{ inventory_hostname }}'
+
+     when: check_repo.stat.isdir is not defined
+...

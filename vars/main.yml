@@ -1,0 +1,19 @@
+---
+
+#Array Variables
+array1: []
+array2: []
+
+#Git variable
+git:
+  repo: <your repo link >
+  pull_dest: < your git clone path >
+  version: < your git repo branch >
+  config_files_dir: < your project config files >
+ 
+
+config_files_dir: < project config files into etc directory >  # e.g., /etc/config
+
+
+ssh_key_file: /root/.ssh/id_rsa   #ssh_key_pair to access git repo
+...
